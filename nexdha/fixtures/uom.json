@@ -1,0 +1,13 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "UOM",
+  "modified": "2021-07-21 14:24:57.321766",
+  "must_be_whole_number": 0,
+  "name": "INR",
+  "parent": null,
+  "parentfield": null,
+  "parenttype": null,
+  "uom_name": "INR"
+ }
+]

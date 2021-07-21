@@ -182,3 +182,33 @@ app_license = "MIT"
 # 	"nexdha.auth.validate"
 # ]
 
+fixtures = [	{
+                "dt": "DocType",
+                "filters": { "custom" : ["=", "1"] }
+               	}
+		, {
+                "dt": "Custom Field", "filters": {"dt" : ["in", ("Sales Invoice")]}
+                }
+		, "Client Script"
+        , "Property Setter"
+		
+		, {
+			"dt": "Report", "filters":{"Module": ["in",("Nexdha")]}
+		}
+		, {
+			"dt": "Role", "filters": {"name": ["like", "Nexdha%"]}
+		  }
+		, {
+                    "dt": "Custom DocPerm", "filters": {"role": ["like","Nexdha%"]}
+        }
+		, { 
+		"dt": "Role Profile", "filters":{"name": ["like", "Nexdha%"]}
+		}
+		,{
+			"dt": "Workspace", "filters":{"name":["like","Nexdha"]}
+		}
+		,{
+			"dt": "UOM", "filters":{"name":["like","INR"]}
+		}
+		,"Letter Head"		
+           ]

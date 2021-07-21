@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include nexdha *.css
+recursive-include nexdha *.csv
+recursive-include nexdha *.html
+recursive-include nexdha *.ico
+recursive-include nexdha *.js
+recursive-include nexdha *.json
+recursive-include nexdha *.md
+recursive-include nexdha *.png
+recursive-include nexdha *.py
+recursive-include nexdha *.svg
+recursive-include nexdha *.txt
+recursive-exclude nexdha *.pyc

@@ -1,1 +1,140 @@
-[]
+[
+ {
+  "docstatus": 0,
+  "doctype": "Role Profile",
+  "modified": "2021-07-22 13:06:29.630098",
+  "name": "Nexdha Accounting Manager",
+  "parent": null,
+  "parentfield": null,
+  "parenttype": null,
+  "role_profile": "Nexdha Accounting Manager",
+  "roles": [
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Accounts Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Accounts User"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Auditor"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "HR Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "HR User"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Inbox User"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Item Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Leave Approver"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Maintenance Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Manufacturing Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Projects Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Purchase Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Purchase Master Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Quality Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Report Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Sales Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Sales Master Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Sales User"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Stock Manager"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Nexdha Accounting"
+   },
+   {
+    "parent": "Nexdha Accounting Manager",
+    "parentfield": "roles",
+    "parenttype": "Role Profile",
+    "role": "Employee"
+   }
+  ]
+ }
+]

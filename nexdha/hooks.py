@@ -210,5 +210,5 @@ fixtures = [	{
 		,{
 			"dt": "UOM", "filters":{"name":["like","INR"]}
 		}
-		,"Letter Head"		
+		,"Letter Head", "Payment Gateway Setup"
            ]

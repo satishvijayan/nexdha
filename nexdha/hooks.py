@@ -106,6 +106,8 @@ app_license = "MIT"
 #	}
 # }
 
+
+
 # Scheduled Tasks
 # ---------------
 
@@ -187,7 +189,7 @@ fixtures = [	{
                 "filters": { "custom" : ["=", "1"] }
                	}
 		, {
-                "dt": "Custom Field", "filters": {"dt" : ["in", ("Sales Invoice")]}
+                "dt": "Custom Field", "filters": {"dt" : ["in", ("Sales Invoice", "Customer")]}
                 }
 		, "Client Script"
         , "Property Setter"
@@ -212,3 +214,13 @@ fixtures = [	{
 		}
 		,"Letter Head"
            ]
+
+doc_events = {
+ 	"Customer": {
+ 		"autoname": "nexdha.nexdha.pg_transaction.name_customer",
+	},
+		"Nexdha CC2CASA Transaction": {
+		"before_submit": "nexdha.nexdha.pg_transaction.submit_nexdha_cc2casa_transaction",
+		"on_cancel":"nexdha.nexdha.pg_transaction.cancel_nexdha_cc2casa_transaction"
+	}
+}

@@ -189,7 +189,7 @@ fixtures = [	{
                 "filters": { "custom" : ["=", "1"] }
                	}
 		, {
-                "dt": "Custom Field", "filters": {"dt" : ["in", ("Sales Invoice", "Customer")]}
+                "dt": "Custom Field", "filters": {"dt" : ["in", ("Sales Invoice", "Customer", "Supplier")]}
                 }
 		, "Client Script"
         , "Property Setter"
@@ -201,7 +201,7 @@ fixtures = [	{
 			"dt": "Role", "filters": {"name": ["like", "Nexdha%"]}
 		  }
 		, {
-                    "dt": "Custom DocPerm", "filters": {"role": ["like","Nexdha%"]}
+            "dt": "Custom DocPerm", "filters": {"parent": ["in",("Nexdha CC2CASA Transaction", "Payment Gateway Setup")]}
         }
 		, { 
 		"dt": "Role Profile", "filters":{"name": ["like", "Nexdha%"]}

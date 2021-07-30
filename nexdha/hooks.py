@@ -221,6 +221,7 @@ doc_events = {
 	},
 		"Nexdha CC2CASA Transaction": {
 		"before_submit": "nexdha.nexdha.pg_transaction.submit_nexdha_cc2casa_transaction",
-		"on_cancel":"nexdha.nexdha.pg_transaction.cancel_nexdha_cc2casa_transaction"
+		"on_cancel":"nexdha.nexdha.pg_transaction.cancel_nexdha_cc2casa_transaction",
+		"on_trash": "nexdha.nexdha.pg_transaction.delete_nexdha_cc2casa_transaction"
 	}
 }

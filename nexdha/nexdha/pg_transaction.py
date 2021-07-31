@@ -13,12 +13,12 @@ from erpnext.accounts.party import get_party_account
 # from erpnext.controllers.taxes_and_totals import get_itemised_tax, get_itemised_taxable_amount #get itemised tax
 # from erpnext.regional.india.utils import calculate_annual_eligible_hra_exemption # relevant to payroll!
 # from erpnext.regional.india.utils import update_taxable_values        # updates tax for each row...
-# from erpnext.stock.get_item_details import  _get_item_tax_template, get_item_tax_map
+from erpnext.stock.get_item_details import  get_default_income_account      #_get_item_tax_template, get_item_tax_map
 
 def name_customer(doc, method):
     if doc.nexdha_user_id:
         # doc.name = "CUST-FROM-MYAPP-{}".format(doc.my_own_id)
-        doc.name="EXT-" + str(doc.nexdha_user_id)
+        doc.name="UID:" + str(doc.nexdha_user_id) + "|name:" + doc.full_name
 
 
 def wrapstring(s):
@@ -117,15 +117,16 @@ def submit_nexdha_cc2casa_transaction(doc, method):
     tax_category = frappe.get_cached_doc('Supplier', doc.payment_gateway_setup.payment_gateway_supplier).tax_category
     if not tax_category:
         tax_category=doc.pg_transaction_defaults.local_supplier_tax_category
-    item_group = doc.supplier_item_code.item_group
+    # item_group = 
     tax_type = 'Purchase' # Tax rules document defines as such
     
     # frappe.msgprint(" | supplier: " + tax_category )
 
-    doc.supplier_tax = get_taxes(company=doc.company, tax_type=tax_type,transaction_date=doc.transaction_date \
-                                , tax_category=tax_category , item_group=item_group \
+    doc.supplier_item_tax[doc.supplier_item_code.name] = get_taxes(company=doc.company, tax_type=tax_type,transaction_date=doc.transaction_date \
+                                , tax_category=tax_category , item_group=doc.supplier_item_code.item_group \
                                 , item=doc.supplier_item_code.name \
                                 , invoice_amount=supplier_fees, amt_inclusive_of_sales_tax=False)
+                        
     # frappe.msgprint('Supplier')
 
     # Customer TAX CALC
@@ -136,7 +137,7 @@ def submit_nexdha_cc2casa_transaction(doc, method):
     item_group = doc.customer_item_code.item_group
     tax_type = 'Sales' # Tax rules document defines as such
 
-    doc.customer_tax = get_taxes( company=doc.company, tax_type=tax_type, transaction_date=doc.transaction_date \
+    doc.customer_item_tax[doc.customer_item_code.name] = get_taxes( company=doc.company, tax_type=tax_type, transaction_date=doc.transaction_date \
                                 , tax_category=tax_category , item_group=item_group \
                                 , item=doc.customer_item_code.name \
                                 , invoice_amount=customer_fees, amt_inclusive_of_sales_tax=True)
@@ -146,7 +147,8 @@ def submit_nexdha_cc2casa_transaction(doc, method):
     beneficiary_settlement_jv=get_make_jv(doc=doc, type='beneficiary_settlement_jv')
     customer_invoice = get_make_invoice(party_type = 'Customer', party=doc.customer_record\
                                         , invoice_date=doc.eta  \
-                                        , tax= doc.customer_tax, transaction_ref=doc.transaction_ref)
+                                        , item_tax= doc.customer_item_tax, transaction_ref=doc.transaction_ref \
+                                        , transfer_amount = doc.charged_amount)
 
 # returns taxes as a dict. Each dict item has the following:
 #    {
@@ -155,9 +157,11 @@ def submit_nexdha_cc2casa_transaction(doc, method):
 #     'tax_amount':0,
 #     'invoice_amount':0
 #     }
+
+# get item tax details
 @frappe.whitelist() 
 def get_taxes(  company, tax_type, transaction_date, tax_category=None, item_group=None, item=None \
-                , invoice_amount=0.00,  amt_inclusive_of_sales_tax=False \
+                ,qty=1, invoice_amount=0.00,  amt_inclusive_of_sales_tax=False \
                 , customer_group=None,supplier_group=None):
     
     args = {
@@ -185,6 +189,7 @@ def get_taxes(  company, tax_type, transaction_date, tax_category=None, item_gro
             'item_group': item_group
             'tax_account': row.tax_type,
             'tax_rate': flt(row.tax_rate/100),
+            'qty':qty,
             'tax_amount':0,
             'invoice_amount':0,
             'tot_tax_amount':0
@@ -207,10 +212,40 @@ def get_taxes(  company, tax_type, transaction_date, tax_category=None, item_gro
 
     return tax
 
+@frappe.whitelist
+def cross_reference():
+    if payment_ref:
+            gross_invoice_amount = total_invoice_amount + total_tax_amount
+
+            if payment_ref.doctype=='Journal Entry':
+                for pay_rows in payment_ref.accounts:
+                    if pay_rows.is_advance=='Yes' and pay_rows.credit_in_account_currency > 0:
+                        adjusted_amount = gross_amount if pay_rows.credit_in_account_currency >= gross_amount \
+                                            else pay_rows.credit_in_account_currency
+
+            row = inv.append("advances",{
+                    'reference_type': payment_ref.doctype,
+                    'reference_name': payment_ref.name,
+                    'advance_amount': pay_rows.credit_in_account_currency,
+                    'allocated_amount': adjusted_amount
+
+                })
+
         
 @frappe.whitelist()
-def get_make_invoice(party_type, party, tax, transaction_ref=None, invoice_date=None):
+def get_make_invoice(party_type, party, item_tax, transaction_ref=None, invoice_date=None \
+                    , transaction_amount=None):
     # customer = doc.customer_record
+    # item_tax contains the item code, amount and tax amount for all items on the invoice
+    # item_tax{item_code1:{ 
+    #                 'item':..,
+    #                 'item_group':..,
+    #                 'tax_account':..,
+    #                 'tax_amount':..,
+    #                 'invoice_amount':..,
+    #                 'tot_tax_amount':..
+    #             }
+    #         }
     nowdate=frappe.utils.nowdate()
     if not invoice_date:
         invoice_date=nowdate
@@ -218,18 +253,66 @@ def get_make_invoice(party_type, party, tax, transaction_ref=None, invoice_date=
     if not posting_date:
         posting_date=nowdate
 
-    invoice_amount=tax[0].invoice_amount
+    # invoice_amount=tax[0].invoice_amount
     if party_type=='Customer':
         inv=frappe.new_doc('Sales Invoice')
         inv.customer = party
         inv.nexdha_reference=transaction_ref
         inv.posting_date=invoice_date
         inv.due_date=invoice_date
-        for row
-        row = inv.append("items",
-                        {
-                            'item':
-                        })
+        inv.remarks =   "Invoice related to Nexdha Tx Reference: " + str(transaction_ref) \
+                        + (" Transfer Amount: " + transaction_amount if transaction_amount else "")
+        row_item=''
+        item_tax={}
+        net_invoice_amount = 0
+        for item_tax_sales_details in item_tax.items():
+            for tax_line in item_tax_sales_details.items():
+                 if row_item != tax_line.item:
+                     row_item=tax_line.item
+                     net_invoice_amount+=tax_line.invoice_amount
+                     temp_item= frappe.get_cached_doc("item", row.item)
+                     row = inv.append("items",
+                                {
+                                    'item':tax_line.item,
+                                    'Rate (Items)': tax_line.invoice_amount,
+                                    'Quantity (Items)':tax_line.qty,
+                                    'Amount (Items)':tax_line.invoice_amount,
+                                    'UOM (Items)':temp_item.uom,
+                                    'Description (Items)': "Transaction Type: " + temp_item.item_name,
+                                    'Income Account (Items)':temp_item.item_defaults[0].income_account
+                                    'hsn_sac': temp_item.gst_hsn_code
+                                    
+                                })
+                if item_tax.has_key(tax_line.tax_account):
+                    item_tax[tax_line.tax_account]['amount']+=tax_line['tax_amount']
+                else:
+                    item_tax[tax_line.tax_account]= {   
+                                                    'charge_type': 'On Net Total',
+                                                    'account_head': tax_line['tax_account'],
+                                                    'rate': tax.tax_rate*100,
+                                                    'tax_amount': tax['tax_amount']
+                                                }
+        
+        for tax_row in item_tax.items():
+            total_tax_amount+=tax_amount
+            row = inv.append("taxes",{
+                                    'charge_type': tax_row.charge_type,
+                                    'account_head':tax_row.account_head,
+                                    'rate': tax_row.rate,
+                                    'tax_amount': tax_row.tax_amount
+                            })
+        
+    try:
+        inv.insert(ignore_permissions=True)
+    except Exception as e:
+        frappe.throw("Invoice Creation failed with error X=" + str(e) )
+        return {}
+
+    return inv
+
+
+
+
 
 
 
@@ -253,7 +336,7 @@ def get_make_jv(doc=None,  type=None):
     if type == sType1:
         if doc.transaction_initiation_jv:
             return frappe.get_cached_doc("Journal Entry",doc.transaction_initiation_jv)
-
+            
         jv.posting_date = doc.transaction_date
         jv.mode_of_payment = doc.payment_gateway_setup.pg_payment_mode
         jv.cheque_no = doc.transaction_reference_number
@@ -301,14 +384,6 @@ def get_make_jv(doc=None,  type=None):
                         'credit_in_account_currency':0
                     }
                 )
-
-        try:
-            jv.insert(ignore_permissions=True)
-        except Exception as e:
-            frappe.throw("Initial JV failed with error X=" + str(e) )
-            return {}
-
-        return jv
     
     ##############################SETTLEMENT TO NODAL #################################
     elif type == sType2:
@@ -346,13 +421,6 @@ def get_make_jv(doc=None,  type=None):
                     }
                 )
 
-        try:
-            jv.insert(ignore_permissions=True)
-        except Exception as e:
-            frappe.throw("Initial JV failed with error X=" + str(e) )
-            return {}
-
-        return jv
     
     ##SETTLEMENT TO CUSTOMER & RECOGNITION OF PAYMENT TO NEXDHA JV #########
     elif type == sType3:
@@ -393,15 +461,16 @@ def get_make_jv(doc=None,  type=None):
                         'credit_in_account_currency':0
                     }
                 )
-        try:
-            jv.insert(ignore_permissions=True)
-        except Exception as e:
-            frappe.throw("Initial JV failed with error X=" + str(e) )
-            return {}
 
-        return jv
+    #############################################################RETURN JV#####################
 
+    try:
+        jv.insert(ignore_permissions=True)
+    except Exception as e:
+        frappe.throw( type + " failed with error X=" + str(e) )
+        return {}
 
+    return jv
 
 
 @frappe.whitelist()

@@ -104,17 +104,7 @@ def submit_nexdha_cc2casa_transaction(doc, method):
                             else doc.pg_transaction_defaults.customer_default_service_item
 
     doc.customer_item_code = frappe.get_cached_doc("Item",doc.transaction_type)
-
-    # USE PG RATE ON TRANSACTION BY DEFAULT. IF NOT AVAILABLE LOOK UP THE PG AND GET DEFAULT RATE FOR SERVICE PROVIDED
-    if not doc.pg_commission_percent:
-        for row in doc.payment_gateway_setup.payment_gateway_settlement_rates:
-                if row.active and row.rate_active_from <= transaction_date <= row.active_to \
-                        and doc.pg_service_type_item_code== row.service_item:
-                    doc.pg_commission_percent = row.pg_reference_rate
-                    break
-    
-    
-
+   
     # Set Customer_record field . CREATE CUSTOMER IF NOT AVAILABLE. 
     doc.customer_record = get_make_customer(pg_tran=doc,add_if_missing=True ).name
 
@@ -122,8 +112,42 @@ def submit_nexdha_cc2casa_transaction(doc, method):
     
     
 
-    # SUPPLIER TAX CALC
-    supplier_fees= doc.pg_commission_amount if doc.pg_commission_amount else flt(doc.pg_commission_percent*doc.charged_amount/100) #pg_rate*total_amount or pg_commission_amount
+    ###### SUPPLIER TAX & FEES CALC#######
+    # Fees may be calculated as follows
+    # 'Rate' - charged_amount * rate
+    # 'Flat Fee' - flat fee regardless of volume (UPI)
+    # 'Flat Fee' + Rate' - base fee + charged_amt*rate
+    # 'Minimum Flat Fee with Rate' - [amt < 1/pg_rate => charge flat fee]. [amt> 1/pg_rate => charged_amt*raet
+    # 'Flat rate / charge by slab' - not calculated here. PG_Commission to be supplied by external system
+    # Logic is only used if we don't have 'Commission Percent'  and 'Commission Rate' on transaction document
+    if doc.pg_commission_amount:
+        supplier_fees=flt(doc.pg_commission_amount)
+    else:
+        if doc.pg_commission_percent:
+            supplier_fees=flt(doc.pg_commission_percent*doc.charged_amount/100)
+        else:
+            for row in doc.payment_gateway_setup.payment_gateway_settlement_rates:
+                if row.active and row.rate_active_from <= transaction_date <= row.rate_active_to \
+                        and doc.pg_service_type_item_code== row.service_item:
+                    doc.pg_commission_percent = row.pg_reference_rate
+                    doc.pg_flat_fee = row.pg_flat_fee
+                    doc.pg_fee_calculation = row.pg_fee_calculation #fee calc in Rate, Flat Fee, Flat Fee + Rate, Minimum Flat Fee with Rate
+                    break 
+        
+            if doc.pg_fee_calculation=='Rate' or not doc.pg_fee_calculation:
+                supplier_fees= flt(doc.pg_commission_percent*doc.charged_amount/100)
+            elif doc.pg_fee_calculation=='Flat Fee':
+                supplier_fees=doc.pg_flat_fee
+            elif doc.pg_fee_calculation=='Flat Fee + Rate':
+                supplier_fees= flt(doc.pg_flat_fee) + flt(doc.pg_commission_percent*doc.charged_amount/100)
+            elif doc.pg_fee_calculation=='Minimum Flat Fee with Rate':
+                supplier_fees = flt(doc.pg_commission_percent*doc.charged_amount/100) if doc.charged_amount > 100/doc.pg_commission_percent \
+                                else doc.pg_flat_fee
+            else:
+                frappe.throw("Unable to calculate Supplier Fees. Please validate data for Document Reference : " + doc.transaction_reference_number)
+
+
+    
     tax_category = frappe.get_cached_doc('Supplier', doc.payment_gateway_setup.payment_gateway_supplier).tax_category
     if not tax_category:
         tax_category=doc.pg_transaction_defaults.local_supplier_tax_category
@@ -179,17 +203,20 @@ def submit_nexdha_cc2casa_transaction(doc, method):
     remarks+= f"\nOriginated from DocType: '{doc.doctype}' \nDocument Link: " + "<a href=" + ref_url + ">" + doc.customer_name +"->" + doc.transaction_reference_number + "</a>" 
     i=1
     for key, ref_doc in ref_docs.items():
-        if not ref_doc:
+        if not ref_doc['name']:
             continue
+        # frappe.msgprint("Remarks:"+ref_doc['doctype']) 
         ref_url = frappe.utils.get_url_to_form(ref_doc['doctype'], ref_doc['name'])
         remarks += f"\n{i}. doctype: {ref_doc['doctype']} \ndoc_ref: " + "<a href=" + ref_url + ">" +ref_doc['name'] + "</a>" 
         i+=1
 
     # frappe.msgprint(remarks)
-    #########################ADD REMARKS AND SUBMIT ###############################################
+    #########################TRY BLOCK ###############################################
+    #########################ADD REMARKS, TO JV AND INVOICE. DON'T SUBMIT INVOICE ####
     try:
         for key, ref_doc in ref_docs.items():
-            if ref_doc['doc']:
+            if ref_doc['name']:
+                
                 if ref_doc['doctype']=="Sales Invoice":
                     ref_doc['doc'].remarks+=remarks
                     ref_doc['doc'].save(ignore_permissions=True)
@@ -200,44 +227,52 @@ def submit_nexdha_cc2casa_transaction(doc, method):
                     if ref_doc['submit']==1:
                         ref_doc['doc'].submit()
                     # frappe.msgprint("from JV saved: " + ref_doc['doc'].name +" | Doc Status: " + str(ref_doc['doc'].docstatus))
-                
-                ref_doc['doc'].reload()
-        # frappe.msgprint("JVs DONE")                
-        ###########################INVOICE PAYMENT ENTRY (can only be made after all changes)###########
-        customer_invoice.reload()
-        if customer_invoice and beneficiary_settlement_jv and doc.submit_customer_invoice==1:
-            
-            payment_doc = frappe.get_doc("Journal Entry Account", {
-                                        'parenttype': 'Journal Entry'
-                                        , 'parent': beneficiary_settlement_jv.name
-                                        , 'party_type': 'Customer'
-                                        , 'party': doc.customer_record
-                                        , 'is_advance': 'Yes'
-                            })
-            pmt_amt = payment_doc.debit_in_account_currency + payment_doc.credit_in_account_currency
-            # frappe.msgprint("RETRIEVED payment_doc")
-            row = customer_invoice.append("advances",{
-                                            'doctype': "Sales Invoice Advance"
-                                            , 'parenttype': customer_invoice.doctype
-                                            , 'parent': customer_invoice.name
-                                            , 'reference_row': payment_doc.name
-                                            , 'reference_type': payment_doc.parenttype
-                                            , 'reference_name': beneficiary_settlement_jv.name
-                                            , 'advance_amount': pmt_amt
-                                            , 'allocated_amount': pmt_amt
-                                            , 'remarks': "Automatic Allocation from: Nexdha CCC2CASA Transaction"
-                                            # , "ref_exchange_rate": 1
-                                        })
-            
-            customer_invoice.save(ignore_permissions=True)
+    except Exception as e:
+        template = "When adding remarks to reference documents: " + doc.customer_name + "| Tx Ref: " \
+                    + doc.transaction_reference_number \
+                    + "an exception of type {0} occurred, arguments:\n{1!r}"
+        message = template.format(type(e).__name__, e.args)
+        # frappe.msgprint(type(e))
+        # frappe.msgprint(str(frappe.DoesNotExistError))
+        frappe.throw(message)
+    
+    ###########################INVOICE PAYMENT ENTRY (can only be made after all changes)###########
+    try:
+        if customer_invoice and beneficiary_settlement_jv and  doc.submit_customer_invoice==1:
+            beneficiary_settlement_jv.reload()
             customer_invoice.reload()
+            if beneficiary_settlement_jv.docstatus==1:
+                payment_doc = frappe.get_doc("Journal Entry Account", {
+                                            'parenttype': 'Journal Entry'
+                                            , 'parent': beneficiary_settlement_jv.name
+                                            , 'party_type': 'Customer'
+                                            , 'party': doc.customer_record
+                                            , 'is_advance': 'Yes'
+                                })
+                pmt_amt = payment_doc.debit_in_account_currency + payment_doc.credit_in_account_currency
+                # frappe.msgprint("line 251 - RETRIEVED payment_doc" + str(pmt_amt))
+                row = customer_invoice.append("advances",{
+                                                'doctype': "Sales Invoice Advance"
+                                                , 'parenttype': customer_invoice.doctype
+                                                , 'parent': customer_invoice.name
+                                                , 'reference_row': payment_doc.name
+                                                , 'reference_type': payment_doc.parenttype
+                                                , 'reference_name': beneficiary_settlement_jv.name
+                                                , 'advance_amount': pmt_amt
+                                                , 'allocated_amount': pmt_amt
+                                                , 'remarks': "Automatic Allocation from: Nexdha CCC2CASA Transaction"
+                                                # , "ref_exchange_rate": 1
+                                            })
+            
+            
+            customer_invoice.save(ignore_permissions=True)            
             # frappe.msgprint("reloaded")
             customer_invoice.submit()
 
-        ##################SUBMIT ALL DOCUMENTS#############################################
+
 
     except Exception as e:
-        template = "When adding payments / remarks to reference documents: " + doc.customer_name + "| Tx Ref: " \
+        template = "When adding payments  to invoice documents: " + doc.customer_name + "| Tx Ref: " \
                     + doc.transaction_reference_number \
                     + "an exception of type {0} occurred, arguments:\n{1!r}"
         message = template.format(type(e).__name__, e.args)
@@ -359,27 +394,27 @@ def get_make_invoice(party_type, party, invoice_items_dict, transaction_ref=None
                     temp_item= frappe.get_cached_doc("Item", item_line['item'])
                     inv_amt = item_line['invoice_amount'] if item_line['invoice_amount'] else 0
                 
-                    frappe.msgprint( 'item_code: '+ temp_item.item_code \
-                                    + '\nrate: ' + str(item_line['invoice_amount']) \
-                                    + '\nqty: ' + str(item_line['qty']) \
-                                    + '\namount: ' + str(inv_amt) \
-                                    + '\nuom: ' + temp_item.stock_uom \
-                                    + '\ndescription : ' + "Transaction Type: " + temp_item.item_name \
-                                    # + '\nincome_account: ' + str(temp_item.item_defaults[0].income_account) \
-                                    + '\ngst_hsn_code: '+ temp_item.gst_hsn_code                    \
-                                    + '\nitem_name: ' +temp_item.item_name \
-                                    + '\nconversion_factor: ' + str(1) \
-                                    + '\nbase_rate: ' + str(inv_amt) \
-                                    + '\nbase_amount: ' +str(inv_amt) \
-                                    + '\ncost_center: ' + cost_center \
-                                    )
+                    # frappe.msgprint( 'item_code: '+ temp_item.item_code \
+                    #                 + '\nrate: ' + str(item_line['invoice_amount']) \
+                    #                 + '\nqty: ' + str(item_line['qty']) \
+                    #                 + '\namount: ' + str(inv_amt) \
+                    #                 + '\nuom: ' + temp_item.stock_uom \
+                    #                 + '\ndescription : ' + "Transaction Type: " + temp_item.item_name \
+                    #                 # + '\nincome_account: ' + str(temp_item.item_defaults[0].income_account) \
+                    #                 + '\ngst_hsn_code: '+ temp_item.gst_hsn_code                    \
+                    #                 + '\nitem_name: ' +temp_item.item_name \
+                    #                 + '\nconversion_factor: ' + str(1) \
+                    #                 + '\nbase_rate: ' + str(inv_amt) \
+                    #                 + '\nbase_amount: ' +str(inv_amt) \
+                    #                 + '\ncost_center: ' + cost_center \
+                    #                 )
 
                     row = inv.append("items",
                                 {
                                     'item_code':temp_item.item_code
                                     , 'rate': item_line['invoice_amount']
                                     , 'qty':item_line['qty']
-                                    , 'amount':item_line['invoice_amount']
+                                    , 'amount':inv_amt
                                     , 'uom':temp_item.stock_uom
                                     , 'description': "Transaction Type: " + temp_item.item_name
                                     , 'income_account':temp_item.item_defaults[0].income_account
@@ -412,8 +447,8 @@ def get_make_invoice(party_type, party, invoice_items_dict, transaction_ref=None
                             })
         
     
-    inv.base_grand_total = inv.base_rounded_total = inv.grand_total=inv.rounded_total=net_invoice_amount+total_tax_amount
-    inv.base_net_total = net_invoice_amount
+    # inv.base_grand_total = inv.base_rounded_total = inv.grand_total=inv.rounded_total=net_invoice_amount+total_tax_amount
+    # inv.base_net_total = net_invoice_amount
 
     inv.remarks =   "<b>**Auto Generated Invoice** </b>" 
 
@@ -422,14 +457,14 @@ def get_make_invoice(party_type, party, invoice_items_dict, transaction_ref=None
     try:
         if net_invoice_amount<=0:
             frappe.msgprint("Invoice Amount must be greater than Zero")
-            return 
+            return None
         inv.insert(ignore_permissions=True)
     except Exception as e:
         template = "When creating invoice for party: " + party + "| Tx Ref: " + transaction_ref + \
                     "an exception of type {0} occurred, arguments:\n{1!r}"
         message = template.format(type(e).__name__, e.args)
         frappe.throw(message)
-        return {}
+        return None
     
     return inv
 
@@ -466,9 +501,10 @@ def get_make_jv(doc=None,  type=None):
         for key1, tax_line in item_tax_purchase_details.items():
             if row_item != tax_line['item']:
                 net_invoice_amount += tax_line['invoice_amount']
+                row_item=tax_line['item']
             
             item_tax += tax_line['tax_amount']
-
+    # frappe.msgprint("Clearance Entry. Inv_amt: " + str(net_invoice_amount) + "| item_tax" + str(item_tax))
     supplier_invoice_amount = net_invoice_amount+item_tax
 
     ##############################INITIAL CLEARANCE ENTRY#################################
@@ -493,7 +529,7 @@ def get_make_jv(doc=None,  type=None):
         ##3 Debit Clearance Account: 101.32 | balance gets into clearance account, for reconciliation post settlement by PG
         # 
         # Customer Credit Entry for total amount charged to card
-        frappe.msgprint(sType1 + ": charged_amt: " + str(doc.charged_amount) + " | supplier_invoice_amount: " + str(supplier_invoice_amount))
+        # frappe.msgprint(sType1 + ": charged_amt: " + str(doc.charged_amount) + " | supplier_invoice_amount: " + str(supplier_invoice_amount))
         row = jv.append("accounts",
                     {
                         
@@ -549,10 +585,10 @@ def get_make_jv(doc=None,  type=None):
         ## Settlement into nodal account
         amount_settled_into_nodal = doc.charged_amount - supplier_invoice_amount
 
-        frappe.msgprint(sType2 + ": Nodal Amt: " + str(amount_settled_into_nodal) \
-                        + " cheque_date: " + str(jv.cheque_date) \
-                        + " pg Settlement days" + str(pg_settlement_days) \
-                        + " posting_date: " + str(transaction_date) )
+        # frappe.msgprint(sType2 + ": Nodal Amt: " + str(amount_settled_into_nodal) \
+        #                 + " cheque_date: " + str(jv.cheque_date) \
+        #                 + " pg Settlement days" + str(pg_settlement_days) \
+        #                 + " posting_date: " + str(transaction_date) )
 
         row = jv.append("accounts",
                     {
@@ -584,7 +620,7 @@ def get_make_jv(doc=None,  type=None):
         jv.cheque_date = doc.eta
         jv.user_remark =     "<b>"+sType3 + " :(Settlement to Beneficiary): </b> "
         # Payment from nodal account (Credit settled_amount)
-        frappe.msgprint(sType3 + ": Settled_amt: " + str(doc.settled_amount) + " | charged_amount: " + str(doc.charged_amount) )
+        # frappe.msgprint(sType3 + ": Settled_amt: " + str(doc.settled_amount) + " | charged_amount: " + str(doc.charged_amount) )
         row = jv.append("accounts",
                     {
                         
@@ -729,9 +765,11 @@ def delete_nexdha_cc2casa_transaction(doc, method=None):
                     row['doc'].reload()
 
                 row['doc'].cancel()
+                # row['doc'].reload()
                 frappe.msgprint("CANCELLED " + row['doc'].name)
 
-            frappe.delete_doc(row['doctype'], row['name'], force=1, for_reload=True)
+
+            frappe.delete_doc(row['doctype'], row['doc'].name, force=1, for_reload=True)
             frappe.msgprint("DELETED " + row['doc'].name)
 
     except Exception as e:
@@ -768,10 +806,12 @@ def get_tx_docs( pg_tran,  get_docs=False):
         try:
             for key, doc_link in ref_docs.items():
                 if doc_link['name']:
+                    # frappe.msgprint("GET_TX_DOCS: " + doc_link['doctype'])
                     doc_link['doc']=frappe.get_doc(doc_link['doctype'], doc_link['name'])
+
         except frappe.DoesNotExistError:
             doc_link['doc']=None
-            frappe.msgprint("did not find"+ str(doc_link['name']))
+            # frappe.msgprint("did not find"+ str(doc_link['name']))
             pass
 
     

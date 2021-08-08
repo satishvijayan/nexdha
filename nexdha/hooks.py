@@ -224,4 +224,5 @@ doc_events = {
 		"on_cancel":"nexdha.nexdha.pg_transaction.cancel_nexdha_cc2casa_transaction",
 		"on_trash": "nexdha.nexdha.pg_transaction.delete_nexdha_cc2casa_transaction"
 	}
+
 }

@@ -9,6 +9,7 @@ from frappe.contacts.doctype.address.address import get_default_address
 from erpnext.accounts.doctype.tax_rule.tax_rule import get_tax_template
 from erpnext.accounts.party import get_party_account
 from erpnext.controllers.accounts_controller import AccountsController
+
 # from erpnext.regional.india.utils import validate_gstin_check_digit   #for validating gstin structure
 # from erpnext.regional.india.utils import validate_pan_for_india       #for validating PAN structure
 # from erpnext.controllers.taxes_and_totals import get_itemised_tax, get_itemised_taxable_amount #get itemised tax
@@ -289,6 +290,7 @@ def submit_nexdha_cc2casa_transaction(doc, method):
 #     'invoice_amount':0
 #     }
 # get item INVOICE AMOUNT AND TAX details NEED TO REFACTOR NAME######################################################
+
 @frappe.whitelist() 
 def get_taxes(  company, tax_type, transaction_date, tax_category=None, item_group=None, item=None \
                 ,qty=1, invoice_amount=0.00,  amt_inclusive_of_sales_tax=False \
@@ -307,31 +309,38 @@ def get_taxes(  company, tax_type, transaction_date, tax_category=None, item_gro
     
     tax_template_name = get_tax_template(transaction_date, args)
     # frappe.msgprint(tax_template_name)
-    tax_template = frappe.get_cached_doc("Item Tax Template", tax_template_name)
+    if tax_type=='Sales':
+        tax_template = frappe.get_cached_doc("Sales Taxes and Charges Template", tax_template_name)
+    else:
+        tax_template = frappe.get_cached_doc("Purchase Taxes and Charges Template", tax_template_name)
+    
+
     # frappe.msgprint(tax_template.name)
     i=0
     tot_tax = 0.00
     tot_tax_rate=0.00
     tax={}
-    for row in tax_template.taxes: 
+    for row in tax_template.taxes:
         tax[i] = {
             'item': item
             , 'item_group': item_group
-            , 'tax_account': row.tax_type
-            , 'tax_rate': flt(row.tax_rate/100)
+            , 'charge_type': row.charge_type
+            , 'tax_account': row.account_head
+            , 'tax_rate': flt(row.rate/100)
             , 'qty':qty
-            , 'tax_amount':0
+            , 'tax_amount':row.tax_amount
             , 'invoice_amount':0
             , 'tot_tax_amount':0
             }
         i+=1
-        tot_tax_rate += flt(row.tax_rate/100)
+        tot_tax_rate += flt(row.rate/100)
         
     invoice_amount = round(invoice_amount/(1+tot_tax_rate),2) if amt_inclusive_of_sales_tax else round(invoice_amount,2)
     tot_tax_amount = round(invoice_amount*tot_tax_rate,2)
     # tot_tax= flt(invoice_amt*tot_tax_rate)
     for key,value in tax.items():
-        value['tax_amount']=round(flt(invoice_amount*value['tax_rate']),2)
+        #some taxes are based on an actual amount, this amount is captured in the 'sales taxes and charges' doc
+        value['tax_amount']=value['tax_amount'] if value['tax_amount']>0 else round(flt(invoice_amount*value['tax_rate']),2) 
         value['invoice_amount']=invoice_amount
         value['tot_tax_amount']=tot_tax_amount
         
@@ -430,7 +439,7 @@ def get_make_invoice(party_type, party, invoice_items_dict, transaction_ref=None
                     item_tax[item_line['tax_account']]['tax_amount']+=item_line['tax_amount']
                 else:
                     item_tax[item_line['tax_account']]= {   
-                                                    'charge_type': 'On Net Total'
+                                                    'charge_type': item_line['charge_type']
                                                     , 'account_head': item_line['tax_account']
                                                     , 'rate': item_line['tax_rate']*100
                                                     , 'tax_amount': item_line['tax_amount']

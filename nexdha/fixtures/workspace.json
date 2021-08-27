@@ -1,15 +1,16 @@
 [
  {
   "cards_label": "Nexdha",
-  "category": "Modules",
+  "category": "",
   "charts": [],
   "charts_label": null,
+  "content": "[{\"type\": \"header\", \"data\": {\"text\": \"Your Shortcuts\", \"level\": 4, \"col\": 12}}, {\"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"PG Transaction\", \"col\": 4}}, {\"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"type\": \"header\", \"data\": {\"text\": \"Nexdha\", \"level\": 4, \"col\": 12}}]",
   "developer_mode_only": 0,
   "disable_user_customization": 0,
   "docstatus": 0,
   "doctype": "Workspace",
-  "extends": "Accounting",
-  "extends_another_page": 1,
+  "extends": "",
+  "extends_another_page": 0,
   "for_user": null,
   "hide_custom": 0,
   "icon": null,
@@ -23,6 +24,7 @@
     "icon": null,
     "is_query_report": 0,
     "label": "Payment Gateway Setup",
+    "link_count": 0,
     "link_to": "Payment Gateway Setup",
     "link_type": "DocType",
     "onboard": 0,
@@ -38,6 +40,7 @@
     "icon": null,
     "is_query_report": 0,
     "label": "PG Transaction Defaults",
+    "link_count": 0,
     "link_to": "PG Transactions Defaults",
     "link_type": "DocType",
     "onboard": 0,
@@ -53,6 +56,7 @@
     "icon": null,
     "is_query_report": 0,
     "label": "CC2CASA",
+    "link_count": 0,
     "link_to": "Nexdha CC2CASA Transaction",
     "link_type": "DocType",
     "onboard": 0,
@@ -63,16 +67,20 @@
     "type": "Link"
    }
   ],
-  "modified": "2021-08-27 11:20:13.039722",
+  "modified": "2021-08-27 11:43:30.152846",
   "module": "Nexdha",
   "name": "Nexdha",
-  "onboarding": null,
+  "onboarding": "",
   "parent": null,
+  "parent_page": null,
   "parentfield": null,
   "parenttype": null,
   "pin_to_bottom": 0,
   "pin_to_top": 0,
+  "public": 0,
   "restrict_to_domain": null,
+  "roles": [],
+  "sequence_id": 18,
   "shortcuts": [
    {
     "color": null,
@@ -89,6 +97,7 @@
     "type": "DocType"
    }
   ],
-  "shortcuts_label": null
+  "shortcuts_label": null,
+  "title": "Accounting"
  }
 ]
